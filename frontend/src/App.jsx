@@ -11,15 +11,7 @@ import { HistoryModal } from './components/HistoryModal';
 import { playTurnSound, playChipSound, playWinSound } from './utils/audio';
 import { triggerConfetti } from './utils/confetti';
 import { ChipBadge } from './components/ChipStack';
-
-// Uses relative origin proxied by Vite dev server or production reverse proxy
-const getApiBase = () => '';
-
-const getWsBase = () => {
-  if (typeof window === 'undefined') return 'ws://localhost:5173';
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}`;
-};
+import { getApiBase, getWsBase } from './utils/api';
 
 export default function App() {
   const [room, setRoom] = useState(null);
@@ -44,11 +36,28 @@ export default function App() {
   const connectWebSocket = useCallback((roomId, pid) => {
     if (!roomId || !pid) return;
 
-    if (wsRef.current) {
-      wsRef.current.close();
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
 
     const socketUrl = `${getWsBase()}/ws/${roomId}/${pid}`;
+
+    // Prevent duplicate connections to the same endpoint
+    if (
+      wsRef.current &&
+      wsRef.current.url === socketUrl &&
+      (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    if (wsRef.current) {
+      wsRef.current.onclose = null; // Suppress close handler on intentional switch
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
     const ws = new WebSocket(socketUrl);
     wsRef.current = ws;
 
@@ -116,14 +125,14 @@ export default function App() {
 
     ws.onclose = () => {
       setConnected(false);
-      // Auto reconnect after 3 seconds if we still have an active room
-      reconnectTimeoutRef.current = setTimeout(() => {
-        const currentRoomId = localStorage.getItem('poker_room_id');
-        const currentPlayerId = localStorage.getItem('poker_player_id');
-        if (currentRoomId && currentPlayerId) {
+      // Auto reconnect after 3 seconds only if room was not intentionally left or cleared
+      const currentRoomId = localStorage.getItem('poker_room_id');
+      const currentPlayerId = localStorage.getItem('poker_player_id');
+      if (currentRoomId && currentPlayerId && currentRoomId === roomId) {
+        reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket(currentRoomId, currentPlayerId);
-        }
-      }, 3000);
+        }, 3000);
+      }
     };
 
     ws.onerror = (err) => {
@@ -234,8 +243,14 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     if (wsRef.current) {
+      wsRef.current.onclose = null;
       wsRef.current.close();
+      wsRef.current = null;
     }
     localStorage.removeItem('poker_room_id');
     localStorage.removeItem('poker_player_id');
@@ -243,6 +258,7 @@ export default function App() {
     setPlayerId('');
     setAvailableActions([]);
     setCurrentView('player');
+    setConnected(false);
   };
 
   // ── Game Action Handlers ────────────────────────────────────────────

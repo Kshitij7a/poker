@@ -11,7 +11,7 @@ from typing import Optional
 
 from .models import RoomState, RoomConfig
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "poker.db")
+DB_PATH = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "..", "poker.db"))
 
 # ── In-memory store ───────────────────────────────────────────────────
 _rooms: dict[str, RoomState] = {}       # room_id -> RoomState

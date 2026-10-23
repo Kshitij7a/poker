@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { History, X, Trophy, Clock, Coins } from 'lucide-react';
+import { getApiBase } from '../utils/api';
 
 export function HistoryModal({ roomId, onClose }) {
   const [history, setHistory] = useState([]);
@@ -9,7 +10,7 @@ export function HistoryModal({ roomId, onClose }) {
     if (!roomId) return;
     const fetchHistory = async () => {
       try {
-        const res = await fetch(`/api/rooms/${roomId}/history`);
+        const res = await fetch(`${getApiBase()}/api/rooms/${roomId}/history`);
         if (res.ok) {
           const data = await res.json();
           setHistory(data.history || []);

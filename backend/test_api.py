@@ -7,9 +7,37 @@ from app.main import app
 client = TestClient(app)
 
 def test_health():
-    res = client.get("/api/health")
+    res = client.get("/health")
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
+
+    res_api = client.get("/api/health")
+    assert res_api.status_code == 200
+    assert res_api.json()["status"] == "ok"
+
+
+def test_invalid_requests():
+    # 1. Empty host name -> 400
+    res = client.post("/api/rooms", json={"host_name": "   "})
+    assert res.status_code == 400
+
+    # 2. Non-existent room lookup -> 404
+    res = client.get("/api/rooms/ZZZZ")
+    assert res.status_code == 404
+
+    # 3. Join non-existent room -> 404
+    res = client.post("/api/rooms/ZZZZ/join", json={"player_name": "Alice"})
+    assert res.status_code == 404
+
+    # 4. Join with empty player name -> 400
+    # First create a room
+    room_res = client.post("/api/rooms", json={"host_name": "Host"})
+    assert room_res.status_code == 200
+    code = room_res.json()["join_code"]
+
+    res = client.post(f"/api/rooms/{code}/join", json={"player_name": "  "})
+    assert res.status_code == 400
+
 
 def test_create_and_join_room():
     # 1. Host creates room
@@ -55,14 +83,20 @@ def test_create_and_join_room():
     assert reconnect_data["player_id"] == join_data["player_id"]
     assert len(reconnect_data["room"]["players"]) == 2
 
-    # 5. History check using join_code
+    # 5. History check using join_code and room_id
     res = client.get(f"/api/rooms/{code}/history")
     assert res.status_code == 200
     assert "history" in res.json()
 
+    res2 = client.get(f"/api/rooms/{data['room_id']}/history")
+    assert res2.status_code == 200
+    assert "history" in res2.json()
+
     print("ALL API INTEGRATION TESTS PASSED!")
+
 
 if __name__ == "__main__":
     test_health()
+    test_invalid_requests()
     test_create_and_join_room()
 
